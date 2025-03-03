@@ -1,60 +1,38 @@
 import org.eclipse.paho.client.mqttv3.*
-import java.util.Scanner
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 fun main() {
-    val broker = "tcp://localhost:1883"
-    val clientId = "MeuPublisherMQTT"
-    val topic = "delivery"
+    val broker = System.getenv("BROKER_URL") ?: "tcp://mosquitto:1883"
+    val clientId = "Publisher"
+    val topic = "meutopico"
+    val messageContent = "Olá, MQTT!"
+
+    val client = MqttClient(broker, clientId, MemoryPersistence())
 
     try {
-        val client = MqttClient(broker, clientId, null)
-
         val options = MqttConnectOptions().apply {
-            isCleanSession = true
+            isCleanSession = false
         }
 
-        client.setCallback(object : MqttCallback {
-            override fun messageArrived(topic: String?, message: MqttMessage?) {
-                println("TX: ${String(message?.payload ?: ByteArray(0))}")
-            }
-
-            override fun connectionLost(cause: Throwable?) {
-                println("❌ Conexão perdida: ${cause?.message}")
-            }
-
-            override fun deliveryComplete(token: IMqttDeliveryToken?) {
-                println("Mensagem entregue!")
-                println("Digite a mensagem para enviar (digite 'sair' para desconectar):")
-            }
-        })
-
-        println("Conectando ao broker: $broker")
         client.connect(options)
-        println("Conectado ao MQTT!")
+        println("🔗 Conectado ao broker: $broker")
 
-        val scanner = Scanner(System.`in`)
-
-        println("Digite a mensagem para enviar (digite 'sair' para desconectar):")
-        while (true) {
-            val messageContent = scanner.nextLine()
-
-            if (messageContent.equals("sair", ignoreCase = true)) {
-                println("Desconectando...")
-                client.disconnect()
-                println("Desconectado do broker!")
-                break
-            }
-
-            val message = MqttMessage(messageContent.toByteArray())
-
-            println("Bytes da mensagem: ${message.payload.contentToString()}")
-
-            client.publish(topic, message)
-            println("TX '$topic': $messageContent")
-
+        val message = MqttMessage(messageContent.toByteArray()).apply {
+            qos = 2
         }
+
+        client.publish(topic, message)
+        println("✅ Mensagem publicada no tópico '$topic': '$messageContent'")
+
+        Thread.sleep(5000)
 
     } catch (e: MqttException) {
-        println("❌ Erro: ${e.message}")
+        println("❌ Erro ao publicar mensagem: ${e.reasonCode} - ${e.message}")
+        e.printStackTrace()
+    } finally {
+        if (client.isConnected) {
+            client.disconnect()
+            println("🔌 Desconectado do broker.")
+        }
     }
 }

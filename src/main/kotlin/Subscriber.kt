@@ -1,32 +1,45 @@
 import org.eclipse.paho.client.mqttv3.*
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 fun main() {
-    val broker = "tcp://localhost:1883"
-    val clientId = "MeuListenerMQTT"
-    val topic = "delivery"
+    val broker = System.getenv("BROKER_URL") ?: "tcp://mosquitto:1883"
+    val clientId = "Subscriber-" + System.currentTimeMillis()
+    val topic = "meutopico"
 
     try {
-        val client = MqttClient(broker, clientId, null)
+        val client = MqttClient(broker, clientId, MemoryPersistence())
 
         val options = MqttConnectOptions().apply {
-            isCleanSession = true
+            isCleanSession = false
+            isAutomaticReconnect = true
         }
 
-        println("Conectando ao broker: $broker")
+        println("🔗 Conectando ao broker: $broker")
         client.connect(options)
-        println("Conectado ao MQTT!")
+        println("✅ Conectado ao MQTT!")
 
-        client.subscribe(topic) { _, message ->
-            println("RX: ${String(message.payload)}")
-        }
+        client.setCallback(object : MqttCallback {
+            override fun messageArrived(topic: String, message: MqttMessage) {
+                println("📥 Mensagem recebida no tópico '$topic': ${String(message.payload)} (QoS: ${message.qos}, Retained: ${message.isRetained})")
+            }
 
-        println("Ouvindo mensagens no tópico: $topic... (Pressione CTRL+C para sair)")
+            override fun connectionLost(cause: Throwable) {
+                println("⚠️ Conexão perdida: ${cause.message}")
+            }
+
+            override fun deliveryComplete(token: IMqttDeliveryToken) {}
+        })
+
+        println("🔔 Inscrevendo-se no tópico: $topic")
+        client.subscribe(topic, 2)
+        println("🔊 Aguardando mensagens...")
 
         while (true) {
-            Thread.sleep(1000)
+            Thread.sleep(5000)
         }
 
-    } catch (e: MqttException) {
-        println("❌ Erro: ${e.message}")
+    } catch (e: Exception) {
+        println("❌ Erro no subscriber: ${e.message}")
+        e.printStackTrace()
     }
 }
